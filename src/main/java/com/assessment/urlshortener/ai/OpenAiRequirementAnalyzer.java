@@ -5,7 +5,14 @@ import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.models.ChatModel;
 import com.openai.models.responses.ResponseCreateParams;
 import com.openai.models.responses.StructuredResponseCreateParams;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
 
+@Component
+@ConditionalOnProperty(
+        name = "app.ai.enabled",
+        havingValue = "true"
+)
 public class OpenAiRequirementAnalyzer {
 
     private final OpenAIClient client;
