@@ -1,14 +1,26 @@
 package com.assessment.urlshortener.orchestration;
 
+import com.assessment.urlshortener.ai.AiRequirementAnalysis;
+import com.assessment.urlshortener.ai.RequirementAnalysisProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class RequirementAnalysisExecutor implements StageExecutor {
+
+    private RequirementAnalysisProvider analysisProvider;
+
+    @Autowired(required = false)
+    public void setAnalysisProvider(
+            RequirementAnalysisProvider analysisProvider) {
+        this.analysisProvider = analysisProvider;
+    }
 
     @Override
     public WorkflowStage getStage() {
@@ -26,13 +38,126 @@ public class RequirementAnalysisExecutor implements StageExecutor {
             );
         }
 
-        String normalizedRequirement = requirement.trim();
+        /*
+         * Controlled AI execution.
+         *
+         * When AI is disabled, unavailable, or fails,
+         * RequirementAnalysisProvider returns Optional.empty()
+         * and execution safely falls back to deterministic analysis.
+         */
+        if (analysisProvider != null) {
 
-        List<String> ambiguities = identifyAmbiguities(
+            Optional<AiRequirementAnalysis> aiAnalysis =
+                    analysisProvider.analyze(requirement);
+
+            if (aiAnalysis.isPresent()) {
+                return applyAiAnalysis(
+                        context,
+                        aiAnalysis.get()
+                );
+            }
+        }
+
+        return executeDeterministicAnalysis(
+                context,
+                requirement
+        );
+    }
+
+    private StageExecutionResult applyAiAnalysis(
+            WorkflowContext context,
+            AiRequirementAnalysis aiResult) {
+
+        String normalizedRequirement =
+                aiResult.normalizedRequirement;
+
+        if (normalizedRequirement == null
+                || normalizedRequirement.isBlank()) {
+
+            normalizedRequirement =
+                    context.getRequirement().trim();
+        }
+
+        List<String> ambiguities =
+                safeList(aiResult.ambiguities);
+
+        List<String> assumptions =
+                safeList(aiResult.assumptions);
+
+        List<String> acceptanceCriteria =
+                safeList(aiResult.acceptanceCriteria);
+
+        List<String> tasks =
+                safeList(aiResult.engineeringTasks);
+
+        Map<String, Object> analysis =
+                new LinkedHashMap<>();
+
+        analysis.put(
+                "normalizedRequirement",
                 normalizedRequirement
         );
 
-        List<String> assumptions = new ArrayList<>();
+        analysis.put(
+                "ambiguities",
+                ambiguities
+        );
+
+        analysis.put(
+                "assumptions",
+                assumptions
+        );
+
+        analysis.put(
+                "acceptanceCriteria",
+                acceptanceCriteria
+        );
+
+        analysis.put(
+                "tasks",
+                tasks
+        );
+
+        analysis.put(
+                "analysisMode",
+                "AI"
+        );
+
+        context.addStageOutput(
+                "normalizedRequirement",
+                normalizedRequirement
+        );
+
+        context.addStageOutput(
+                "requirementAnalysis",
+                analysis
+        );
+
+        context.addDecision(
+                "Requirement analysis completed using "
+                        + "the optional AI analysis path"
+        );
+
+        return StageExecutionResult.success(
+                "AI requirement analysis completed",
+                analysis
+        );
+    }
+
+    private StageExecutionResult executeDeterministicAnalysis(
+            WorkflowContext context,
+            String requirement) {
+
+        String normalizedRequirement =
+                requirement.trim();
+
+        List<String> ambiguities =
+                identifyAmbiguities(
+                        normalizedRequirement
+                );
+
+        List<String> assumptions =
+                new ArrayList<>();
 
         if (!ambiguities.isEmpty()) {
             assumptions.add(
@@ -57,12 +182,38 @@ public class RequirementAnalysisExecutor implements StageExecutor {
                 "Obtain human approval before release"
         );
 
-        Map<String, Object> analysis = new LinkedHashMap<>();
-        analysis.put("normalizedRequirement", normalizedRequirement);
-        analysis.put("ambiguities", ambiguities);
-        analysis.put("assumptions", assumptions);
-        analysis.put("acceptanceCriteria", acceptanceCriteria);
-        analysis.put("tasks", tasks);
+        Map<String, Object> analysis =
+                new LinkedHashMap<>();
+
+        analysis.put(
+                "normalizedRequirement",
+                normalizedRequirement
+        );
+
+        analysis.put(
+                "ambiguities",
+                ambiguities
+        );
+
+        analysis.put(
+                "assumptions",
+                assumptions
+        );
+
+        analysis.put(
+                "acceptanceCriteria",
+                acceptanceCriteria
+        );
+
+        analysis.put(
+                "tasks",
+                tasks
+        );
+
+        analysis.put(
+                "analysisMode",
+                "DETERMINISTIC_FALLBACK"
+        );
 
         context.addStageOutput(
                 "normalizedRequirement",
@@ -91,13 +242,28 @@ public class RequirementAnalysisExecutor implements StageExecutor {
         );
     }
 
-    private List<String> identifyAmbiguities(String requirement) {
+    private List<String> safeList(
+            List<String> values) {
 
-        List<String> ambiguities = new ArrayList<>();
-        String lower = requirement.toLowerCase();
+        if (values == null) {
+            return List.of();
+        }
+
+        return values;
+    }
+
+    private List<String> identifyAmbiguities(
+            String requirement) {
+
+        List<String> ambiguities =
+                new ArrayList<>();
+
+        String lower =
+                requirement.toLowerCase();
 
         if (!lower.contains("expiration")
                 && !lower.contains("expire")) {
+
             ambiguities.add(
                     "URL expiration behavior is not specified"
             );
@@ -105,6 +271,7 @@ public class RequirementAnalysisExecutor implements StageExecutor {
 
         if (!lower.contains("analytics")
                 && !lower.contains("click")) {
+
             ambiguities.add(
                     "Analytics requirements are not specified"
             );
@@ -112,6 +279,7 @@ public class RequirementAnalysisExecutor implements StageExecutor {
 
         if (!lower.contains("authentication")
                 && !lower.contains("security")) {
+
             ambiguities.add(
                     "Authentication and security requirements are not specified"
             );
@@ -119,6 +287,7 @@ public class RequirementAnalysisExecutor implements StageExecutor {
 
         if (!lower.contains("scale")
                 && !lower.contains("performance")) {
+
             ambiguities.add(
                     "Scale and performance expectations are not specified"
             );
