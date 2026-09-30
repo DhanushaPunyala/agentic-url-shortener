@@ -720,6 +720,33 @@ Stage executors currently produce deterministic prototype engineering outputs ra
 
 The orchestration architecture allows those executors to be replaced by real agent implementations later.
 
+### Optional AI-Backed Requirement Analysis
+
+The Requirement Analysis stage supports an optional LLM-backed execution path using the OpenAI Java SDK.
+
+AI execution is controlled through:
+
+`app.ai.enabled=false`
+
+AI is disabled by default, keeping the prototype deterministic, reproducible, and independent of external API availability.
+
+When AI execution is explicitly enabled, `OpenAiRequirementAnalyzer` can transform a raw requirement into structured engineering information including:
+
+- Normalized requirement
+- Ambiguities
+- Controlled assumptions
+- Acceptance criteria
+- Engineering tasks
+
+`RequirementAnalysisProvider` provides the controlled execution boundary. If AI is disabled, unavailable, or the AI operation fails, execution safely continues through the deterministic requirement-analysis path.
+
+The selected execution mode is recorded in the requirement-analysis output as either:
+
+- `AI`
+- `DETERMINISTIC_FALLBACK`
+
+This design demonstrates controlled autonomy, graceful fallback, reproducible execution, and explicit decision traceability while avoiding a mandatory dependency on an external LLM service.
+
 ### Test Executor
 
 The TestingExecutor represents the testing stage and records validation output. The Maven test suite is executed externally as part of prototype validation rather than being launched directly by the executor.
